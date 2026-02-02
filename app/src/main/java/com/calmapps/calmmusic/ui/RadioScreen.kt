@@ -10,10 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.SkipNext
 import androidx.compose.material.icons.outlined.SkipPrevious
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -26,7 +24,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.calmapps.calmmusic.ExternalMediaRepository
@@ -54,8 +51,11 @@ fun RadioScreen(
     val scope = rememberCoroutineScope()
     val mediaState by ExternalMediaRepository.mediaState.collectAsState()
 
-    var showPermissionSheet by remember { mutableStateOf(false) }
-    val sheetState = rememberModalBottomSheetMMDState()
+    var showAccessibilitySheet by remember { mutableStateOf(false) }
+    var showNotificationSheet by remember { mutableStateOf(false) }
+
+    val accessibilitySheetState = rememberModalBottomSheetMMDState()
+    val notificationSheetState = rememberModalBottomSheetMMDState()
 
     val isRadioActive = mediaState.packageName.contains("radio", ignoreCase = true) ||
             mediaState.packageName.contains("fm", ignoreCase = true)
@@ -64,7 +64,9 @@ fun RadioScreen(
         EmptyRadioState(
             onPowerOn = {
                 if (!isAccessibilityServiceEnabled(context, CalmMusicAccessibilityService::class.java)) {
-                    showPermissionSheet = true
+                    showAccessibilitySheet = true
+                } else if (!isNotificationListenerEnabled(context)) {
+                    showNotificationSheet = true
                 } else {
                     scope.launch {
                         val packageName = findRadioPackage(context)
@@ -91,58 +93,96 @@ fun RadioScreen(
         )
     }
 
-    if (showPermissionSheet) {
+    // 1. Accessibility Permission Sheet
+    if (showAccessibilitySheet) {
         ModalBottomSheetMMD(
-            onDismissRequest = { showPermissionSheet = false },
-            sheetState = sheetState
+            onDismissRequest = { showAccessibilitySheet = false },
+            sheetState = accessibilitySheetState
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                TextMMD(
-                    text = "Permission Required",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                TextMMD(
-                    text = "To control the FM Radio tuner, CalmMusic requires the Accessibility Service permission. Please enable 'CalmMusic Helper' in the following settings screen.",
-                    fontSize = 16.sp,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                ButtonMMD(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(12.dp),
-                    onClick = {
-                        showPermissionSheet = false
-                        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        context.startActivity(intent)
-                    }
-                ) {
-                    TextMMD("Open Settings", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedButtonMMD(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(12.dp),
-                    onClick = { showPermissionSheet = false }
-                ) {
-                    TextMMD("Cancel", fontSize = 18.sp, fontWeight = FontWeight.Medium)
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-            }
+            PermissionSheetContent(
+                title = "Control Permission Required",
+                description = "To control the FM Radio tuner, CalmMusic requires the Accessibility Service permission. Please enable 'CalmMusic Helper' in the settings.",
+                buttonText = "Open Accessibility Settings",
+                onConfirm = {
+                    showAccessibilitySheet = false
+                    val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                },
+                onCancel = { showAccessibilitySheet = false }
+            )
         }
+    }
+
+    if (showNotificationSheet) {
+        ModalBottomSheetMMD(
+            onDismissRequest = { showNotificationSheet = false },
+            sheetState = notificationSheetState
+        ) {
+            PermissionSheetContent(
+                title = "Read Status Permission",
+                description = "To see the current radio frequency and status, CalmMusic needs to read the 'Now Playing' notification from the radio app. Please allow 'Notification Access' for CalmMusic.",
+                buttonText = "Open Notification Settings",
+                onConfirm = {
+                    showNotificationSheet = false
+                    val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                },
+                onCancel = { showNotificationSheet = false }
+            )
+        }
+    }
+}
+
+@Composable
+fun PermissionSheetContent(
+    title: String,
+    description: String,
+    buttonText: String,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+    ) {
+        TextMMD(
+            text = title,
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        TextMMD(
+            text = description,
+            fontSize = 16.sp,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        ButtonMMD(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(12.dp),
+            onClick = onConfirm
+        ) {
+            TextMMD(buttonText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        OutlinedButtonMMD(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(12.dp),
+            onClick = onCancel
+        ) {
+            TextMMD("Cancel", fontSize = 18.sp, fontWeight = FontWeight.Medium)
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
     }
 }
 
@@ -241,9 +281,10 @@ fun ActiveRadioState(
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // We removed the PermissionWarning here because we enforce it before entering this state now,
+            // but keeping a small check doesn't hurt if the user revokes it while playing.
             if (!isNotificationListenerEnabled(context)) {
-                Spacer(modifier = Modifier.height(16.dp))
-                PermissionWarning(context)
+                TextMMD("Notification access revoked", color = MaterialTheme.colorScheme.error)
             } else if (!mediaState.title.contains("FM Radio", ignoreCase = true)) {
                 Spacer(modifier = Modifier.height(8.dp))
                 if (!mediaState.title.matches(Regex(".*\\d{2,3}.*"))) {
@@ -296,19 +337,6 @@ fun ActiveRadioState(
                 )
             }
             TextMMD("Turn Off FM Radio", fontSize = 14.sp, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-fun PermissionWarning(context: Context) {
-    Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.errorContainer).clickable {
-        context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-    }.padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.Settings, "Settings", tint = MaterialTheme.colorScheme.onErrorContainer)
-            Spacer(modifier = Modifier.width(8.dp))
-            TextMMD("Enable Control Permission", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
         }
     }
 }
