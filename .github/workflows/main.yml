@@ -17,10 +17,16 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      - name: Install Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept licenses
+        run: yes | sdkmanager --licenses
+
       - name: Grant execute permission
         run: chmod +x ./gradlew
 
-      - name: Build debug APK
+      - name: Build APK
         run: ./gradlew assembleDebug
 
       - name: Upload APK
